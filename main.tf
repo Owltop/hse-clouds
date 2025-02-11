@@ -13,8 +13,9 @@ provider "yandex" {
   zone      = "ru-central1-a"
 }
 
-resource "yandex_compute_disk" "boot-disk-1" {
-  name     = "boot-disk-1"
+resource "yandex_compute_disk" "boot-disk" {
+  count    = 3
+  name     = "boot-disk-${count.index}"
   type     = "network-hdd"
   zone     = "ru-central1-a"
   size     = "13"
@@ -22,8 +23,9 @@ resource "yandex_compute_disk" "boot-disk-1" {
 }
 
 
-resource "yandex_compute_instance" "vm-1" {
-  name = "terraform1"
+resource "yandex_compute_instance" "logbroker" {
+  count = 2
+  name  = "logbroker-${count.index}"
 
   resources {
     cores         = 2
@@ -32,7 +34,32 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   boot_disk {
-    disk_id = yandex_compute_disk.boot-disk-1.id
+    disk_id = yandex_compute_disk.boot-disk[count.index].id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-1.id
+    nat       = true
+  }
+
+  metadata = {
+    ssh-keys = "ubuntu:${file("~/.ssh/id_rsa.pub")}"
+  }
+
+  allow_stopping_for_update = true
+}
+
+resource "yandex_compute_instance" "clickhouse" {
+  name = "clickhouse"
+
+  resources {
+    cores         = 2
+    memory        = 3
+    core_fraction = 20
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk[2].id
   }
 
   network_interface {
@@ -58,10 +85,18 @@ resource "yandex_vpc_subnet" "subnet-1" {
   v4_cidr_blocks = ["192.168.10.0/24"]
 }
 
-output "internal_ip_address_vm_1" {
-  value = yandex_compute_instance.vm-1.network_interface.0.ip_address
+output "internal_ip_addresses_logbroker" {
+  value = yandex_compute_instance.logbroker[*].network_interface.0.ip_address
 }
 
-output "external_ip_address_vm_1" {
-  value = yandex_compute_instance.vm-1.network_interface.0.nat_ip_address
+output "internal_ip_addresses_clickhouse" {
+  value = yandex_compute_instance.clickhouse.network_interface.0.ip_address
+}
+
+output "external_ip_addresses_logbroker" {
+  value = yandex_compute_instance.logbroker[*].network_interface.0.nat_ip_address
+}
+
+output "external_ip_addresses_clickhouse" {
+  value = yandex_compute_instance.clickhouse.network_interface.0.nat_ip_address
 }
